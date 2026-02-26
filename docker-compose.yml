@@ -1,0 +1,239 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SehatKu EHR — Docker Compose Full Stack
+# Roadmap: Phase 0.3
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: sehatku-ehr
+
+services:
+  # ── PostgreSQL 16 ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sehatku_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ehr_db}
+      POSTGRES_USER: ${POSTGRES_USER:-ehr_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ehr_password}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ehr_user} -d ${POSTGRES_DB:-ehr_db}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sehatku_net
+
+  # ── Redis 7 ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sehatku_redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_password} --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--pass', '${REDIS_PASSWORD:-redis_password}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sehatku_net
+
+  # ── MinIO (S3-compatible storage) ─────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: sehatku_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minio_password}
+    volumes:
+      - minio_data:/data
+    ports:
+      - '${MINIO_PORT:-9000}:9000' # S3 API
+      - '${MINIO_CONSOLE_PORT:-9001}:9001' # Web Console
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - sehatku_net
+
+  # ── Keycloak 24 (Identity Provider) ───────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: sehatku_keycloak
+    restart: unless-stopped
+    command: start-dev
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-ehr_db}
+      KC_DB_USERNAME: ${POSTGRES_USER:-ehr_user}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-ehr_password}
+      KC_DB_SCHEMA: keycloak
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin_password}
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: 'false'
+      KC_HOSTNAME_STRICT_HTTPS: 'false'
+      KC_LOG_LEVEL: INFO
+    ports:
+      - '${KEYCLOAK_PORT:-8080}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8080/health/ready']
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - sehatku_net
+
+  # ── HashiCorp Vault (dev mode — key management) ───────────────────────────
+  vault:
+    image: hashicorp/vault:latest
+    container_name: sehatku_vault
+    restart: unless-stopped
+    command: vault server -dev -dev-root-token-id=${VAULT_DEV_ROOT_TOKEN:-dev-root-token}
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN:-dev-root-token}
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - '${VAULT_PORT:-8200}:8200'
+    healthcheck:
+      test: ['CMD', 'vault', 'status']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sehatku_net
+
+  # ── HAPI FHIR R4 Server ───────────────────────────────────────────────────
+  hapi-fhir:
+    image: hapiproject/hapi:latest
+    container_name: sehatku_hapi_fhir
+    restart: unless-stopped
+    environment:
+      hapi.fhir.default_encoding: JSON
+      hapi.fhir.fhir_version: R4
+      spring.datasource.url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-ehr_db}?currentSchema=fhir_store
+      spring.datasource.username: ${POSTGRES_USER:-ehr_user}
+      spring.datasource.password: ${POSTGRES_PASSWORD:-ehr_password}
+      spring.datasource.driverClassName: org.postgresql.Driver
+      spring.jpa.properties.hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect
+      spring.jpa.hibernate.ddl-auto: update
+    ports:
+      - '${HAPI_FHIR_PORT:-8090}:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8080/fhir/metadata']
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 120s
+    networks:
+      - sehatku_net
+
+  # ── Prometheus (Metrics Collector) ────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sehatku_prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - '${PROMETHEUS_PORT:-9090}:9090'
+    networks:
+      - sehatku_net
+
+  # ── Loki (Log Aggregation) ────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:latest
+    container_name: sehatku_loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./infra/monitoring/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    ports:
+      - '${LOKI_PORT:-3100}:3100'
+    networks:
+      - sehatku_net
+
+  # ── Grafana (Monitoring Dashboard) ────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sehatku_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-grafana_password}
+      GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_PORT:-3200}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - '${GRAFANA_PORT:-3200}:3000'
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - sehatku_net
+
+  # ── NestJS API (placeholder — built in Phase 1) ───────────────────────────
+  api:
+    image: node:22-alpine
+    container_name: sehatku_api
+    working_dir: /app
+    command: echo "API service placeholder — will be replaced in Phase 1.1"
+    profiles:
+      - apps
+    networks:
+      - sehatku_net
+
+  # ── Next.js Web (placeholder — built in Phase 2) ──────────────────────────
+  web:
+    image: node:22-alpine
+    container_name: sehatku_web
+    working_dir: /app
+    command: echo "Web service placeholder — will be replaced in Phase 2.1"
+    profiles:
+      - apps
+    networks:
+      - sehatku_net
+
+# ── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:
+
+# ── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  sehatku_net:
+    driver: bridge

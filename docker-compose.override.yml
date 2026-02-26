@@ -1,0 +1,53 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SehatKu EHR — Docker Compose Override (Local Development)
+# Overrides docker-compose.yml for hot reload and volume mounts
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: sehatku-ehr
+
+services:
+  # ── MinIO: expose both API and console ────────────────────────────────────
+  minio:
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+
+  # ── Keycloak: start-dev mode (already set in main compose) ────────────────
+  keycloak:
+    environment:
+      KC_LOG_LEVEL: DEBUG
+
+  # ── Vault: dev mode — root token fixed for easy local access ──────────────
+  vault:
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-root-token
+
+  # ── NestJS API: hot reload via volume mount (active in Phase 1+) ──────────
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: npm run dev --workspace=apps/api
+    profiles:
+      - apps
+
+  # ── Next.js Web: hot reload via volume mount (active in Phase 2+) ─────────
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages:/app/packages
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+    command: npm run dev --workspace=apps/web
+    profiles:
+      - apps
