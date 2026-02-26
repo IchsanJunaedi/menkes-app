@@ -1,0 +1,13 @@
+{
+    "name": "@sehatku/api",
+    "version": "0.1.0",
+    "private": true,
+    "description": "SehatKu EHR — NestJS Backend API",
+    "scripts": {
+        "dev": "nest start --watch",
+        "build": "nest build",
+        "test": "jest",
+        "lint": "eslint \"src/**/*.ts\"",
+        "lint:fix": "eslint \"src/**/*.ts\" --fix"
+    }
+}

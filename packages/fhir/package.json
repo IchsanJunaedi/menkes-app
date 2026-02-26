@@ -1,0 +1,14 @@
+{
+    "name": "@sehatku/fhir",
+    "version": "0.1.0",
+    "private": true,
+    "description": "SehatKu EHR — FHIR R4 mappers and resource types",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "scripts": {
+        "build": "tsc",
+        "lint": "eslint \"src/**/*.ts\"",
+        "lint:fix": "eslint \"src/**/*.ts\" --fix",
+        "test": "jest"
+    }
+}

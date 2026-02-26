@@ -1,0 +1,13 @@
+{
+    "name": "@sehatku/web",
+    "version": "0.1.0",
+    "private": true,
+    "description": "SehatKu EHR — Next.js Web Dashboard",
+    "scripts": {
+        "dev": "next dev -p 3001",
+        "build": "next build",
+        "test": "jest",
+        "lint": "next lint",
+        "lint:fix": "next lint --fix"
+    }
+}

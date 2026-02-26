@@ -1,0 +1,13 @@
+{
+    "name": "@sehatku/mobile",
+    "version": "0.1.0",
+    "private": true,
+    "description": "SehatKu EHR — React Native Expo Patient App",
+    "scripts": {
+        "dev": "expo start",
+        "build": "expo build",
+        "test": "jest",
+        "lint": "eslint \"src/**/*.{ts,tsx}\"",
+        "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix"
+    }
+}
