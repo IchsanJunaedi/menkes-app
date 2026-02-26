@@ -1,0 +1,371 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// === Identity & Master Patient Index (MPI) ===
+
+model MpiRecord {
+  id              String   @id @default(cuid())
+  nik             String   @unique // National ID (NIK)
+  goldenName      String // Canonical/verified name
+  dateOfBirth     DateTime
+  gender          Gender
+  addressProvince String?
+  addressCity     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  version         Int      @default(1)
+
+  patientIdentities PatientIdentity[]
+  patients          Patient[]
+}
+
+model PatientIdentity {
+  id             String   @id @default(cuid())
+  mpiId          String
+  system         String // e.g. "bpjs", "hospital-local-id", "nik"
+  value          String
+  organizationId String?
+  createdAt      DateTime @default(now())
+
+  mpi          MpiRecord     @relation(fields: [mpiId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
+
+  @@unique([system, value])
+}
+
+model User {
+  id         String   @id @default(cuid())
+  keycloakId String   @unique // Keycloak user ID
+  email      String   @unique
+  role       UserRole
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  practitioner Practitioner?
+  patient      Patient?
+}
+
+model Patient {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  mpiId     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  version   Int      @default(1)
+
+  user       User                 @relation(fields: [userId], references: [id])
+  mpi        MpiRecord            @relation(fields: [mpiId], references: [id])
+  encounters Encounter[]
+  consents   Consent[]
+  allergies  AllergyIntolerance[]
+}
+
+model Practitioner {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  strNumber      String   @unique // Surat Tanda Registrasi
+  specialization String?
+  organizationId String
+  isVerified     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  encounters   Encounter[]
+}
+
+model Organization {
+  id        String           @id @default(cuid())
+  name      String
+  type      OrganizationType // HOSPITAL, CLINIC, PUSKESMAS
+  parentId  String?
+  province  String
+  city      String
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  parent            Organization?     @relation("OrgHierarchy", fields: [parentId], references: [id])
+  children          Organization[]    @relation("OrgHierarchy")
+  practitioners     Practitioner[]
+  patientIdentities PatientIdentity[]
+}
+
+// === Clinical Data ===
+
+model Encounter {
+  id             String          @id @default(cuid())
+  patientId      String
+  practitionerId String
+  organizationId String
+  status         EncounterStatus // PLANNED, IN_PROGRESS, FINISHED, CANCELLED
+  class          EncounterClass // AMBULATORY, INPATIENT, EMERGENCY
+  startDate      DateTime
+  endDate        DateTime?
+  chiefComplaint String?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  version        Int             @default(1)
+
+  patient        Patient             @relation(fields: [patientId], references: [id])
+  practitioner   Practitioner        @relation(fields: [practitionerId], references: [id])
+  conditions     Condition[]
+  observations   Observation[]
+  medicationReqs MedicationRequest[]
+  procedures     Procedure[]
+  documents      DocumentReference[]
+}
+
+model Condition {
+  id                 String             @id @default(cuid())
+  encounterId        String
+  icd10Code          String // e.g. "J06.9"
+  icd10Display       String // e.g. "Acute upper respiratory infection"
+  clinicalStatus     ClinicalStatus // ACTIVE, RESOLVED, INACTIVE
+  verificationStatus VerificationStatus // CONFIRMED, PROVISIONAL, DIFFERENTIAL
+  onsetDate          DateTime?
+  abatementDate      DateTime?
+  notes              String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+}
+
+model Observation {
+  id           String            @id @default(cuid())
+  encounterId  String
+  loincCode    String // e.g. "8310-5" for body temperature
+  loincDisplay String
+  valueString  String?
+  valueNumber  Decimal?
+  valueUnit    String?
+  status       ObservationStatus // FINAL, PRELIMINARY, AMENDED
+  effectiveAt  DateTime
+  createdAt    DateTime          @default(now())
+
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+}
+
+model MedicationRequest {
+  id             String           @id @default(cuid())
+  encounterId    String
+  medicationName String
+  medicationCode String? // e.g. BPOM/FORNAS code
+  dosage         String
+  frequency      String
+  duration       String
+  route          String // ORAL, TOPICAL, INJECTION
+  status         MedRequestStatus // ACTIVE, COMPLETED, CANCELLED
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+}
+
+model AllergyIntolerance {
+  id            String             @id @default(cuid())
+  patientId     String
+  substance     String
+  substanceCode String?
+  category      AllergyCategory // FOOD, MEDICATION, ENVIRONMENT
+  criticality   AllergyCriticality // LOW, HIGH, UNABLE_TO_ASSESS
+  reactionDesc  String?
+  onsetDate     DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id])
+}
+
+model Procedure {
+  id          String          @id @default(cuid())
+  encounterId String
+  snomedCode  String?
+  display     String
+  status      ProcedureStatus // COMPLETED, IN_PROGRESS, NOT_DONE
+  performedAt DateTime
+  notes       String?
+  createdAt   DateTime        @default(now())
+
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+}
+
+model DocumentReference {
+  id           String   @id @default(cuid())
+  encounterId  String
+  type         DocType // LAB_RESULT, RADIOLOGY, CONSENT_FORM, OTHER
+  title        String
+  storageKey   String // MinIO object key
+  mimeType     String
+  sizeBytes    Int
+  isEncrypted  Boolean  @default(true)
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  encounter Encounter @relation(fields: [encounterId], references: [id])
+}
+
+// === Consent & Audit ===
+
+model Consent {
+  id           String         @id @default(cuid())
+  patientId    String
+  granteeType  GranteeType // PRACTITIONER, ORGANIZATION
+  granteeId    String
+  scope        ConsentScope[] // READ_SUMMARY, READ_FULL, WRITE
+  status       ConsentStatus // ACTIVE, REVOKED, EXPIRED
+  validFrom    DateTime
+  validUntil   DateTime?
+  grantedAt    DateTime       @default(now())
+  revokedAt    DateTime?
+  revokeReason String?
+
+  patient Patient @relation(fields: [patientId], references: [id])
+}
+
+// IMMUTABLE  never UPDATE or DELETE, only INSERT via trigger
+model AuditEvent {
+  id           String   @id @default(cuid())
+  eventType    String // READ, CREATE, UPDATE, DELETE, LOGIN, EXPORT, BREAK_GLASS
+  resourceType String // Patient, Encounter, MedicationRequest, etc.
+  resourceId   String
+  actorId      String // User ID
+  actorRole    String
+  ipAddress    String
+  userAgent    String?
+  isEmergency  Boolean  @default(false)
+  metadata     Json?
+  occurredAt   DateTime @default(now())
+
+  @@index([resourceType, resourceId])
+  @@index([actorId])
+  @@index([occurredAt])
+}
+
+model EmergencyAccessLog {
+  id             String    @id @default(cuid())
+  patientId      String
+  practitionerId String
+  reason         String
+  accessedAt     DateTime  @default(now())
+  notifiedAt     DateTime?
+  supervisorId   String?
+}
+
+// === Enums ===
+
+enum UserRole {
+  PATIENT
+  DOCTOR
+  NURSE
+  ADMIN
+  AUDITOR
+  SYSTEM
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum OrganizationType {
+  HOSPITAL
+  CLINIC
+  PUSKESMAS
+  LABORATORY
+  PHARMACY
+}
+
+enum EncounterStatus {
+  PLANNED
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+}
+
+enum EncounterClass {
+  AMBULATORY
+  INPATIENT
+  EMERGENCY
+}
+
+enum ClinicalStatus {
+  ACTIVE
+  RESOLVED
+  INACTIVE
+}
+
+enum VerificationStatus {
+  CONFIRMED
+  PROVISIONAL
+  DIFFERENTIAL
+}
+
+enum ObservationStatus {
+  FINAL
+  PRELIMINARY
+  AMENDED
+}
+
+enum MedRequestStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  STOPPED
+}
+
+enum AllergyCategory {
+  FOOD
+  MEDICATION
+  ENVIRONMENT
+  BIOLOGIC
+}
+
+enum AllergyCriticality {
+  LOW
+  HIGH
+  UNABLE_TO_ASSESS
+}
+
+enum ProcedureStatus {
+  COMPLETED
+  IN_PROGRESS
+  NOT_DONE
+}
+
+enum DocType {
+  LAB_RESULT
+  RADIOLOGY
+  CONSENT_FORM
+  PRESCRIPTION
+  OTHER
+}
+
+enum GranteeType {
+  PRACTITIONER
+  ORGANIZATION
+}
+
+enum ConsentScope {
+  READ_SUMMARY
+  READ_FULL
+  WRITE
+}
+
+enum ConsentStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
