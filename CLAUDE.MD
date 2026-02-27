@@ -11,7 +11,7 @@ File ini berisi seluruh arsitektur, schema database, tech stack, dan urutan peng
 - Jika ragu, tanya dulu jangan langsung implement
 
 ## Phase Saat Ini
-**PHASE 0** — Environment, Foundation & Schema Design
+**PHASE 1** — Core Backend + Security Layer
 
 ## Stack Utama
 - Backend: NestJS + TypeScript + Prisma + PostgreSQL
@@ -41,6 +41,6 @@ Claude Code akan baca file-nya, lalu kasih summary status — dari situ kamu tin
 
 ## 4. Saat mau mulai task spesifik
 ```
-Based on EHR_ROADMAP_PHASES.md, implement Phase 0.4 — 
+Based on roadmap.md, implement Phase 0.4 — 
 the Prisma schema for MPI and Patient Identity tables.
 Follow the schema exactly as written in the roadmap.
