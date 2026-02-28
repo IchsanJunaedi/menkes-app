@@ -1,0 +1,1 @@
+{"version":3,"file":"practitioner.schema.d.ts","sourceRoot":"","sources":["practitioner.schema.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,CAAC,EAAE,MAAM,KAAK,CAAC;AAExB,eAAO,MAAM,2BAA2B;;;;;iBAKtC,CAAC;AAEH,eAAO,MAAM,2BAA2B;;;;iBAA+D,CAAC;AAExG,MAAM,MAAM,qBAAqB,GAAG,CAAC,CAAC,KAAK,CAAC,OAAO,2BAA2B,CAAC,CAAC;AAChF,MAAM,MAAM,qBAAqB,GAAG,CAAC,CAAC,KAAK,CAAC,OAAO,2BAA2B,CAAC,CAAC"}
