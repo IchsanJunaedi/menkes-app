@@ -60,3 +60,12 @@ test-audit.ts
 
 CLAUDE.md
 roadmap.md
+
+# Diagnostics & Temporary build fragments
+apps/api/out.txt
+apps/api/sql.txt
+boot*.txt
+runtime_err*
+sentry_exports.txt
+packages/ui/src/**/*.js
+packages/ui/src/**/*.js.map
