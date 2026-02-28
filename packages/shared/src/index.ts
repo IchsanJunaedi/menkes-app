@@ -1,4 +1,5 @@
-// Entry point for @sehatku/shared
-// Schemas, types, and constants will be exported from here as they are built in Phase 1+
-
-export { };
+export * from './schemas/patient.schema';
+export * from './schemas/organization.schema';
+export * from './schemas/practitioner.schema';
+export * from './schemas/encounter.schema';
+export * from './schemas/allergy.schema';
