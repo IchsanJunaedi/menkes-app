@@ -55,6 +55,8 @@ prisma/migrations/
 # Misc
 *.tsbuildinfo
 .eslintcache
+test-audit.js
+test-audit.ts
 
 CLAUDE.md
 roadmap.md
