@@ -122,6 +122,30 @@ services:
     networks:
       - sehatku_net
 
+  # ── ClamAV (File Scanner) ─────────────────────────────────────────────────
+  clamav:
+    image: clamav/clamav:latest
+    container_name: sehatku_clamav
+    restart: unless-stopped
+    ports:
+      - '3310:3310'
+    networks:
+      - sehatku_net
+
+  # ── NGINX (Reverse Proxy) ─────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: sehatku_nginx
+    restart: unless-stopped
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
+    ports:
+      - '80:80'
+      - '443:443'
+    networks:
+      - sehatku_net
+
   # ── HAPI FHIR R4 Server ───────────────────────────────────────────────────
   hapi-fhir:
     image: hapiproject/hapi:latest
@@ -202,6 +226,18 @@ services:
     networks:
       - sehatku_net
 
+  # ── Uptime Kuma (Service Monitor) ─────────────────────────────────────────
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: sehatku_uptime_kuma
+    restart: always
+    volumes:
+      - uptime_kuma_data:/app/data
+    ports:
+      - '3001:3001'
+    networks:
+      - sehatku_net
+
   # ── NestJS API (placeholder — built in Phase 1) ───────────────────────────
   api:
     image: node:22-alpine
@@ -232,6 +268,7 @@ volumes:
   prometheus_data:
   loki_data:
   grafana_data:
+  uptime_kuma_data:
 
 # ── Networks ─────────────────────────────────────────────────────────────────
 networks:

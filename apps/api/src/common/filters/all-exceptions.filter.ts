@@ -1,5 +1,6 @@
 import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
 import { Request, Response } from 'express';
+import * as Sentry from '@sentry/nestjs';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -14,8 +15,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const message =
       exception instanceof HttpException ? exception.getResponse() : 'Internal server error';
 
-    // In production, we might want to log the full exception stack trace
-    // structured log format should go here (e.g. Pino)
+    // Capture the exception in Sentry globally
+    Sentry.captureException(exception);
 
     response.status(status).json({
       success: false,
